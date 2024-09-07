@@ -118,6 +118,7 @@ app.get('/vehicles', ensureAuthToken, async (req, res) => {
     nodes {
       tokenId
       owner
+      imageURI
       definition {
         make
       }
