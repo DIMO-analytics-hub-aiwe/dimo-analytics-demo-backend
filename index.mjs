@@ -120,7 +120,10 @@ app.get('/vehicles', ensureAuthToken, async (req, res) => {
         owner
         imageURI
         definition {
+          id
           make
+          model
+          year
         }
         aftermarketDevice {
           manufacturer {
