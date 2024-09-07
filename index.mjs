@@ -98,14 +98,43 @@ app.get('/user', ensureAuthToken, async (req, res) => {
   }
 });
 
-// get all vehicles
-app.get('/vehicles', ensureAuthToken, async (req, res) => {
+// get list device makes
+app.get('/deviceMakes', ensureAuthToken, async (req, res) => {
   try {
     const response = await dimo.devicedefinitions.listDeviceMakes();
     res.json(response);
   } catch (error) {
-    console.error('Error get user:', error);
-    res.status(500).json({ error: 'Failed to get user', details: error.message });
+    console.error('Error get device makes:', error);
+    res.status(500).json({ error: 'Failed to get device makes', details: error.message });
+  }
+});
+
+// get user vehicles
+app.get('/vehicles', ensureAuthToken, async (req, res) => {
+  const privileged = process.env.client_id;
+  const query = `{
+  vehicles(filterBy: {privileged: "${privileged}"} first: 100) {
+    totalCount
+    nodes {
+      tokenId
+      owner
+      definition {
+        make
+      }
+      aftermarketDevice {
+        manufacturer {
+          name
+        }
+      }
+    }
+  }
+}`;
+  try {
+    const response = await dimo.identity.query({query: query});
+    res.json(response);
+  } catch (error) {
+    console.error('Error get vehicles:', error);
+    res.status(500).json({ error: 'Failed to get vehicles', details: error.message });
   }
 });
 
