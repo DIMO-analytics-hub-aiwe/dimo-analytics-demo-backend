@@ -165,27 +165,13 @@ app.get('/vehicle/:vehicleId/trips', ensureVehiclePrivilege, async (req, res) =>
   }
 });
 
-// get vehicle max speed in specific time interval per day
-app.get('/vehicle/:vehicleId/maxSpeed', ensureVehiclePrivilege, async (req, res) => {
+// get vehicle info (fuel, speed) in specific time interval per day
+app.get('/vehicle/:vehicleId/info', ensureVehiclePrivilege, async (req, res) => {
   const vehicleId = parseInt(req.params.vehicleId);
   const startTime = req.query.startTime;
   const endTime = req.query.endTime;
   const auth = req.user; // see ensureVehiclePrivilege
-  const result = await vehicleDailySpeed(auth, vehicleId, startTime, endTime, false);
-  if (result instanceof Error) {
-    res.status(500).json({ error: 'Failed to get daily speed', details: result.message });
-  } else {
-    res.json(result);
-  }
-});
-
-// get vehicle avg speed in specific time interval per day
-app.get('/vehicle/:vehicleId/avgSpeed', ensureVehiclePrivilege, async (req, res) => {
-  const vehicleId = parseInt(req.params.vehicleId);
-  const startTime = req.query.startTime;
-  const endTime = req.query.endTime;
-  const auth = req.user; // see ensureVehiclePrivilege
-  const result = await vehicleDailySpeed(auth, vehicleId, startTime, endTime, true);
+  const result = await vehicleInfo(auth, vehicleId, startTime, endTime);
   if (result instanceof Error) {
     res.status(500).json({ error: 'Failed to get daily speed', details: result.message });
   } else {
@@ -195,8 +181,7 @@ app.get('/vehicle/:vehicleId/avgSpeed', ensureVehiclePrivilege, async (req, res)
 
 // Helpers
 
-async function vehicleDailySpeed(auth, vehicleId, startTime, endTime, avg) {
-  const agg = avg ? "AVG" : "MAX";
+async function vehicleInfo(auth, vehicleId, startTime, endTime) {
   const privileged = process.env.client_id;
   const query = `{
     signals(
@@ -206,7 +191,10 @@ async function vehicleDailySpeed(auth, vehicleId, startTime, endTime, avg) {
       ) 
     {
       timestamp
-      maxSpeed: speed(agg: ${agg})
+      maxFuelPercent: powertrainFuelSystemRelativeLevel(agg: MAX)
+      avgFuelPercent: powertrainFuelSystemRelativeLevel(agg: AVG)
+      maxSpeed: speed(agg: MAX)
+      avgSpeed: speed(agg: AVG)
     }
   }`;
   try {
