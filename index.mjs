@@ -168,7 +168,7 @@ app.get('/vehicle/:vehicleId/trips', ensureVehiclePrivilege, async (req, res) =>
   }
 });
 
-// get vehicle info (fuel, speed) in specific datetime interval grouped by time interval (default 24h)
+// get vehicle info (fuel, speed etc) in specific datetime interval grouped by datetime interval (default 24h)
 app.get('/vehicle/:vehicleId/info', ensureVehiclePrivilege, async (req, res) => {
   const vehicleId = parseInt(req.params.vehicleId);
   const startTime = req.query.startTime;
@@ -180,18 +180,29 @@ app.get('/vehicle/:vehicleId/info', ensureVehiclePrivilege, async (req, res) => 
   const auth = req.user; // see ensureVehiclePrivilege
   const result = await vehicleInfo(auth, vehicleId, startTime, endTime, interval);
   if (result instanceof Error) {
-    res.status(500).json({ error: 'Failed to get daily speed', details: result.message });
+    res.status(500).json({ error: 'Failed to get vehicle info', details: result.message });
   } else {
     res.json(result);
   }
 });
 
-// Helpers
+// get vehicle current info (fuel, speed etc)
+app.get('/vehicle/:vehicleId/currentInfo', ensureVehiclePrivilege, async (req, res) => {
+  const vehicleId = parseInt(req.params.vehicleId);
+  const auth = req.user; // see ensureVehiclePrivilege
+  const result = await vehicleCurrentInfo(auth, vehicleId);
+  if (result instanceof Error) {
+    res.status(500).json({ error: 'Failed to get vehicle info', details: result.message });
+  } else {
+    res.json(result);
+  }
+});
+
+// Vehicle Helpers
 
 async function vehicleInfo(auth, vehicleId, startTime, endTime, interval) {
-  const privileged = process.env.client_id;
   const query = `{
-    signals(
+    info: signals(
       tokenId: ${vehicleId},
       from: "${startTime}", to: "${endTime}", 
       interval: "${interval}"
@@ -212,7 +223,25 @@ async function vehicleInfo(auth, vehicleId, startTime, endTime, interval) {
     const response = await dimo.telemetry.query({...auth, query: query});
     return response;
   } catch (error) {
-    console.error('Error get daily speed:', error);
+    console.error('Error get vehicle info:', error);
+    return error;
+  }
+}
+
+async function vehicleCurrentInfo(auth, vehicleId) {
+  const query = `{
+      info: signalsLatest(tokenId: ${vehicleId}) {
+      speed { value }
+      fuel: powertrainFuelSystemRelativeLevel { value }
+      travelledDistance: powertrainTransmissionTravelledDistance { value }
+      chargePercent: powertrainTractionBatteryStateOfChargeCurrent { value }
+    }
+  }`;
+  try {
+    const response = await dimo.telemetry.query({...auth, query: query});
+    return response;
+  } catch (error) {
+    console.error('Error get vehicle info:', error);
     return error;
   }
 }
