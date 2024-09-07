@@ -1,130 +1,137 @@
 import express from 'express';
+import dotenv from 'dotenv';
 import { DIMO } from '@dimo-network/dimo-node-sdk';
 
-console.log(`Server running at http://localhost`);
+// setup env
+dotenv.config();
+
+// start app
 const app = express();
 const port = 3000;
-
 app.use(express.json());
 
 // Initialize DIMO client
-const dimo = new DIMO('Production'); // Use 'Production' for production environment
+const dimo = new DIMO('Production');
 
-// Authentication route using the 3-step process
-app.post('/auth', async (req, res) => {
-  const { client_id, domain, private_key } = req.body;
+// Auth token
 
+let authHeaders = null;
+let authExpiry = null;
+
+function isAuthValid() {
+  if (!authHeaders || !authExpiry) return false;
+  return Date.now() < authExpiry;
+}
+
+async function getAuthToken() {
   try {
-    // Step 1: Generate Challenge
-    const challenge = await dimo.auth.generateChallenge({
-      client_id: client_id,
-      domain: domain,
-      address: client_id
+    if (isAuthValid()) {
+      console.log("Token valid");
+      return authHeaders;
+    }
+    console.log("Get new token");
+    const result = await dimo.auth.getToken({
+      client_id: process.env.client_id,
+      domain: process.env.redirect_uri,
+      private_key: process.env.private_key,
     });
-    console.log(challenge);
-    // Step 2: Sign Challenge
-    const signature = await dimo.auth.signChallenge({
-      message: challenge.challenge,
-      private_key: private_key
-    });
-    console.log(signature);
-    // Step 3: Submit Challenge
-    const tokens = await dimo.auth.submitChallenge({
-      client_id: client_id,
-      domain: domain,
-      state: challenge.state,
-      signature: signature
-    });
-    console.log(tokens);
-    // Return the access token
-    res.json({ access_token: tokens.access_token });
+    console.log(result);
+    authHeaders = result;
+    authExpiry = Date.now() + 24*60*60*1000; // temp expire interval - 24h
+    return result;
   } catch (error) {
-    console.error('Authentication error:', error);
-    res.status(400).json({ error: 'Authentication failed', details: error.message });
+    console.error('Error getting auth token:', error);
+    return error;
   }
-});
+}
 
-// Middleware to verify DIMO token (simplified for example purposes)
-const verifyDimoToken = (req, res, next) => {
-  const token = req.headers['authorization'];
-  if (!token || !token.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Отсутствует или неверный токен' });
+// Middleware
+
+async function ensureAuthToken(req, res, next) {
+  const result = await getAuthToken();
+  if (result instanceof Error) {
+    res.status(500).json({ error: 'Unable to authenticate', details: result.message });
+  } else {
+    req.user = result;
+    return next()
   }
-  req.user = { headers: { "Authorization": token } };
-  next();
-};
+}
 
-// Protected route example
-app.get('/protected', verifyDimoToken, async (req, res) => {
-  try {
-    // Example of using a protected endpoint
-    const userInfo = await dimo.user.get(req.user);
-    res.json({ message: 'Access granted', user: userInfo });
-  } catch (error) {
-    console.error('Error accessing protected route:', error);
-    res.status(500).json({ error: 'Failed to access protected resource' });
+async function ensureVehiclePrivilege(req, res, next) {
+  const auth = await getAuthToken();
+  if (auth instanceof Error) {
+    res.status(500).json({ error: 'Unable to authenticate', details: auth.message });
+    return;
   }
-});
-
-// New route for token exchange
-app.post('/exchange', verifyDimoToken, async (req, res) => {
-  const { vehicleTokenId } = req.body;
-  const auth = req.user; // Assuming authentication data is stored in req.user
-  console.log(auth);
-  console.log(vehicleTokenId);
+  const vehicleId = parseInt(req.params.vehicleId);
+  console.log(vehicleId);
   try {
     const result = await dimo.tokenexchange.exchange({
       ...auth,
       privileges: [1,4,6],
-      tokenId: vehicleTokenId
+      tokenId: vehicleId
     });
-
-    res.json({ message: 'Token exchange successful', result });
+    console.log("Token exchange result:", result);
+    req.user = result;
+    return next();
   } catch (error) {
     console.error('Error during token exchange:', error);
     res.status(500).json({ error: 'Error during token exchange', details: error.message });
   }
+}
+
+// APIs
+
+// get token
+app.get('/authToken', ensureAuthToken, async (req, res) => {
+  res.status(200).json(req.user);
 });
 
-// Маршрут для получения информации о транспортном средстве
-app.get('/vehicle/:vehicleId', verifyDimoToken, async (req, res) => {
+// get user
+app.get('/user', ensureAuthToken, async (req, res) => {
   try {
-    const vehicleId = req.params.vehicleId;
-    const auth = req.user; // Assuming authentication data is stored in req.user
-    console.log(auth);
-    console.log(vehicleId);
-    const vehicleInfo = await dimo.devicedata.getVehicleStatus({...req.user,  tokenId: vehicleId});;
-    res.json({ message: 'Информация о транспортном средстве получена', vehicle: vehicleInfo });
+    const userInfo = await dimo.user.get(req.user);
+    res.json(userInfo);
   } catch (error) {
-    console.error('Ошибка при получении информации о транспортном средстве:', error);
-    res.status(500).json({ error: 'Ошибка при получении информации о транспортном средстве', details: error.message });
+    console.error('Error get user:', error);
+    res.status(500).json({ error: 'Failed to get user', details: error.message });
   }
 });
 
-// Маршрут для получения информации о поездках
-app.get('/vehicle/:vehicleId/trips', verifyDimoToken, async (req, res) => {
+// get all vehicles
+app.get('/vehicles', ensureAuthToken, async (req, res) => {
   try {
-    const vehicleId = req.params.vehicleId;
-    const auth = req.user; // Assuming authentication data is stored in req.user
-    console.log(auth);
-    console.log(vehicleId);
-    const trips = await dimo.trips.list({...req.user,  tokenId: vehicleId});
-    res.json({ message: 'Информация о поездках получена', trips });
+    const response = await dimo.devicedefinitions.listDeviceMakes();
+    res.json(response);
   } catch (error) {
-    console.error('Ошибка при получении информации о поездках:', error);
-    res.status(500).json({ error: 'Ошибка при получении информации о поездках', details: error.message });
+    console.error('Error get user:', error);
+    res.status(500).json({ error: 'Failed to get user', details: error.message });
   }
 });
 
-// Маршрут для получения текущего статуса транспортного средства
-app.get('/vehicle/:vehicleId/status', verifyDimoToken, async (req, res) => {
+// get vehicle status by id
+app.get('/vehicle/:vehicleId', ensureVehiclePrivilege, async (req, res) => {
   try {
-    const vehicleId = req.params.vehicleId;
-    const status = await dimo.vehicle.getStatus(req.user, vehicleId);
-    res.json({ message: 'Текущий статус транспортного средства получен', status });
+    const vehicleId = parseInt(req.params.vehicleId);
+    const auth = req.user; // see ensureVehiclePrivilege
+    const vehicleInfo = await dimo.devicedata.getVehicleStatus({...auth, tokenId: vehicleId});;
+    res.json(vehicleInfo);
   } catch (error) {
-    console.error('Ошибка при получении статуса транспортного средства:', error);
-    res.status(500).json({ error: 'Ошибка при получении статуса транспортного средства', details: error.message });
+    console.error('Error getting vehicle status:', error);
+    res.status(500).json({ error: 'Error getting vehicle status', details: error.message });
+  }
+});
+
+// get vehicle trips
+app.get('/vehicle/:vehicleId/trips', ensureVehiclePrivilege, async (req, res) => {
+  try {
+    const vehicleId = parseInt(req.params.vehicleId);
+    const auth = req.user; // see ensureVehiclePrivilege
+    const trips = await dimo.trips.list({...auth,  tokenId: vehicleId});
+    res.json(trips);
+  } catch (error) {
+    console.error('Error getting vehicle trips:', error);
+    res.status(500).json({ error: 'Error getting vehicle trips', details: error.message });
   }
 });
 
