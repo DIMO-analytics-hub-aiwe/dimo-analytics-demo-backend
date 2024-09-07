@@ -113,23 +113,23 @@ app.get('/deviceMakes', ensureAuthToken, async (req, res) => {
 app.get('/vehicles', ensureAuthToken, async (req, res) => {
   const privileged = process.env.client_id;
   const query = `{
-  vehicles(filterBy: {privileged: "${privileged}"} first: 100) {
-    totalCount
-    nodes {
-      tokenId
-      owner
-      imageURI
-      definition {
-        make
-      }
-      aftermarketDevice {
-        manufacturer {
-          name
+    vehicles(filterBy: {privileged: "${privileged}"} first: 100) {
+      totalCount
+      nodes {
+        tokenId
+        owner
+        imageURI
+        definition {
+          make
+        }
+        aftermarketDevice {
+          manufacturer {
+            name
+          }
         }
       }
     }
-  }
-}`;
+  }`;
   try {
     const response = await dimo.identity.query({query: query});
     res.json(response);
@@ -157,11 +157,40 @@ app.get('/vehicle/:vehicleId/trips', ensureVehiclePrivilege, async (req, res) =>
   try {
     const vehicleId = parseInt(req.params.vehicleId);
     const auth = req.user; // see ensureVehiclePrivilege
-    const trips = await dimo.trips.list({...auth,  tokenId: vehicleId});
+    const trips = await dimo.trips.list({...auth, tokenId: vehicleId});
     res.json(trips);
   } catch (error) {
     console.error('Error getting vehicle trips:', error);
     res.status(500).json({ error: 'Error getting vehicle trips', details: error.message });
+  }
+});
+
+// get vehicle max speed in specific time interval per day
+app.get('/vehicle/:vehicleId/maxSpeed', ensureVehiclePrivilege, async (req, res) => {
+  const vehicleId = parseInt(req.params.vehicleId);
+  const startTime = req.query.startTime;
+  const endTime = req.query.endTime;
+  console.log(startTime);
+  console.log(endTime);
+  const privileged = process.env.client_id;
+  const query = `{
+    signals(
+      tokenId: ${vehicleId},
+      from: "${startTime}", to: "${endTime}", 
+      interval: "24h" 
+      ) 
+    {
+      timestamp
+      maxSpeed: speed(agg: MAX)
+    }
+  }`;
+  try {
+    const auth = req.user; // see ensureVehiclePrivilege
+    const response = await dimo.telemetry.query({...auth, query: query});
+    res.json(response);
+  } catch (error) {
+    console.error('Error get vehicles:', error);
+    res.status(500).json({ error: 'Failed to get vehicles', details: error.message });
   }
 });
 
