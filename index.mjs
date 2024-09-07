@@ -196,6 +196,8 @@ async function vehicleInfo(auth, vehicleId, startTime, endTime) {
       timestamp
       maxTravelledDistance: powertrainTransmissionTravelledDistance(agg: MAX)
       avgTravelledDistance: powertrainTransmissionTravelledDistance(agg: AVG)
+      maxChargePercent: powertrainTractionBatteryStateOfChargeCurrent(agg: MAX)
+      avgChargePercent: powertrainTractionBatteryStateOfChargeCurrent(agg: AVG)
       maxFuelPercent: powertrainFuelSystemRelativeLevel(agg: MAX)
       avgFuelPercent: powertrainFuelSystemRelativeLevel(agg: AVG)
       maxSpeed: speed(agg: MAX)
