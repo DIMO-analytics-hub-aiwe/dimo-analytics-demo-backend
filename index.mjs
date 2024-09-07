@@ -168,13 +168,17 @@ app.get('/vehicle/:vehicleId/trips', ensureVehiclePrivilege, async (req, res) =>
   }
 });
 
-// get vehicle info (fuel, speed) in specific time interval per day
+// get vehicle info (fuel, speed) in specific datetime interval grouped by time interval (default 24h)
 app.get('/vehicle/:vehicleId/info', ensureVehiclePrivilege, async (req, res) => {
   const vehicleId = parseInt(req.params.vehicleId);
   const startTime = req.query.startTime;
   const endTime = req.query.endTime;
+  var interval = req.query.interval;
+  if (interval == null) {
+    interval = "24h";
+  }
   const auth = req.user; // see ensureVehiclePrivilege
-  const result = await vehicleInfo(auth, vehicleId, startTime, endTime);
+  const result = await vehicleInfo(auth, vehicleId, startTime, endTime, interval);
   if (result instanceof Error) {
     res.status(500).json({ error: 'Failed to get daily speed', details: result.message });
   } else {
@@ -184,14 +188,14 @@ app.get('/vehicle/:vehicleId/info', ensureVehiclePrivilege, async (req, res) => 
 
 // Helpers
 
-async function vehicleInfo(auth, vehicleId, startTime, endTime) {
+async function vehicleInfo(auth, vehicleId, startTime, endTime, interval) {
   const privileged = process.env.client_id;
   const query = `{
     signals(
       tokenId: ${vehicleId},
       from: "${startTime}", to: "${endTime}", 
-      interval: "24h" 
-      ) 
+      interval: "${interval}"
+      )
     {
       timestamp
       maxTravelledDistance: powertrainTransmissionTravelledDistance(agg: MAX)

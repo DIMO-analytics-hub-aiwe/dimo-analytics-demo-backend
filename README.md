@@ -27,4 +27,4 @@ If you wasn't able to stop previous server and port is taken when try to start a
 - `vehicles` - GET user vehicles (currently vehicles of privileged id).
 - `vehicle/:vehicleId` - GET vehicle status by id.
 - `vehicle/:vehicleId/trips` - GET vehicle trips by id.
-- `vehicle/:vehicleId/info?startTime=<startTime>&endTime=<endTime>` - GET daily info (fuel, speed) of vehicle id in given datetime interval. Example: `http://localhost:3000/vehicle/100387/info?startTime=2024-07-18T23:20:38.051797Z&endTime=2024-07-19T02:59:11.380939Z`
+- `vehicle/:vehicleId/info?startTime=<startTime>&endTime=<endTime>` - GET info (fuel, speed) of vehicle id in given datetime interval grouped by datetime interval. Example: `http://localhost:3000/vehicle/100387/info?startTime=2024-07-18T23:20:38.051797Z&endTime=2024-07-19T02:59:11.380939Z&interval=1s`. If `interval` is not specified then 24h is used.
