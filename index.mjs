@@ -170,8 +170,33 @@ app.get('/vehicle/:vehicleId/maxSpeed', ensureVehiclePrivilege, async (req, res)
   const vehicleId = parseInt(req.params.vehicleId);
   const startTime = req.query.startTime;
   const endTime = req.query.endTime;
-  console.log(startTime);
-  console.log(endTime);
+  const auth = req.user; // see ensureVehiclePrivilege
+  const result = await vehicleDailySpeed(auth, vehicleId, startTime, endTime, false);
+  if (result instanceof Error) {
+    res.status(500).json({ error: 'Failed to get daily speed', details: result.message });
+  } else {
+    res.json(result);
+  }
+});
+
+// get vehicle avg speed in specific time interval per day
+app.get('/vehicle/:vehicleId/avgSpeed', ensureVehiclePrivilege, async (req, res) => {
+  const vehicleId = parseInt(req.params.vehicleId);
+  const startTime = req.query.startTime;
+  const endTime = req.query.endTime;
+  const auth = req.user; // see ensureVehiclePrivilege
+  const result = await vehicleDailySpeed(auth, vehicleId, startTime, endTime, true);
+  if (result instanceof Error) {
+    res.status(500).json({ error: 'Failed to get daily speed', details: result.message });
+  } else {
+    res.json(result);
+  }
+});
+
+// Helpers
+
+async function vehicleDailySpeed(auth, vehicleId, startTime, endTime, avg) {
+  const agg = avg ? "AVG" : "MAX";
   const privileged = process.env.client_id;
   const query = `{
     signals(
@@ -181,18 +206,17 @@ app.get('/vehicle/:vehicleId/maxSpeed', ensureVehiclePrivilege, async (req, res)
       ) 
     {
       timestamp
-      maxSpeed: speed(agg: MAX)
+      maxSpeed: speed(agg: ${agg})
     }
   }`;
   try {
-    const auth = req.user; // see ensureVehiclePrivilege
     const response = await dimo.telemetry.query({...auth, query: query});
-    res.json(response);
+    return response;
   } catch (error) {
-    console.error('Error get vehicles:', error);
-    res.status(500).json({ error: 'Failed to get vehicles', details: error.message });
+    console.error('Error get daily speed:', error);
+    return error;
   }
-});
+}
 
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
